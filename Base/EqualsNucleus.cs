@@ -4,25 +4,25 @@
     {
         private class EqualsReaction : Reaction
         {
-            public override string? Execute()
+            public override byte? Execute()
             {
-                object? a = GetInput<object>("A");
-                object? b = GetInput<object>("B");
+                object? a = GetInput<object>(0);
+                object? b = GetInput<object>(1);
                 if (a != null)
-                    SetOutput("Value", a.Equals(b));
+                    SetOutput(0, a.Equals(b));
                 else if (b != null)
-                    SetOutput("Value", b.Equals(a));
+                    SetOutput(0, b.Equals(a));
                 else
-                    SetOutput("Value", true);
+                    SetOutput(0, true);
                 return null;
             }
         }
 
-        public EqualsNucleus() : base("==", false)
+        public EqualsNucleus() : base("==", false, 0, 2, 1)
         {
-            AddInput<object>("A");
-            AddInput<object>("B");
-            AddOutput<bool>("Value");
+            SetInput<object>(0, "A");
+            SetInput<object>(1, "B");
+            SetOutput<bool>(0, "Value");
         }
 
         protected override Reaction? NewReaction() => new EqualsReaction();

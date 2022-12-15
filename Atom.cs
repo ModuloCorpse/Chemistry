@@ -1,11 +1,13 @@
-﻿namespace StreamChemistry
+﻿using System.Text;
+
+namespace StreamChemistry
 {
     public class Atom
     {
         private class Input
         {
             private readonly Atom m_Atom;
-            private readonly string m_Name;
+            private readonly byte m_Idx;
             private readonly Type m_Type;
             private bool m_HasValue = false;
             private object? m_Value = null;
@@ -14,14 +16,14 @@
             internal object? Value => m_Value;
             internal Type Type => m_Type;
 
-            public Input(Atom atom, string name, Type type)
+            public Input(Atom atom, byte idx, Type type)
             {
                 m_Atom = atom;
-                m_Name = name;
+                m_Idx = idx;
                 m_Type = type;
             }
 
-            public Tuple<string, string> GetInputInfo() => new(m_Atom.ID, m_Name);
+            public Tuple<byte[], byte> GetInputInfo() => new(m_Atom.ID, m_Idx);
 
             public bool CheckInput(ref HashSet<string> atomsID) => m_Output?.CheckInput(ref atomsID) ?? false;
 
@@ -31,7 +33,10 @@
                     return true;
                 if (m_Output != null)
                 {
-                    m_Output.Evaluate();
+                    if (m_Output.HaveValue())
+                        SetValue(m_Output.GetValue());
+                    else
+                        m_Output.Evaluate();
                     return m_HasValue;
                 }
                 return false;
@@ -48,27 +53,31 @@
                 }
             }
 
+            public void Reset()
+            {
+                m_Value = null;
+                m_HasValue = false;
+            }
+
             public void Bond(Output output) => m_Output = output;
         }
         private class Output
         {
             private readonly Atom m_Atom;
-            private readonly string m_Name;
             private readonly Type m_Type;
             private readonly List<Input> m_Inputs = new();
             private bool m_HasValue = false;
             private object? m_Value = null;
 
-            public Output(Atom atom, string name, Type type)
+            public Output(Atom atom, Type type)
             {
                 m_Atom = atom;
-                m_Name = name;
                 m_Type = type;
             }
 
-            public List<Tuple<string, string>> GetLinkedInputs()
+            public List<Tuple<byte[], byte>> GetLinkedInputs()
             {
-                List<Tuple<string, string>> ret = new();
+                List<Tuple<byte[], byte>> ret = new();
                 foreach (var input in m_Inputs)
                     ret.Add(input.GetInputInfo());
                 return ret;
@@ -77,6 +86,7 @@
             public bool CheckInput(ref HashSet<string> atomsID) => m_Atom.CheckInput(ref atomsID);
 
             public bool HaveValue() => m_HasValue;
+            public object? GetValue() => m_Value;
 
             public bool SetValue(object? value)
             {
@@ -89,6 +99,12 @@
                     return true;
                 }
                 return false;
+            }
+
+            public void Reset()
+            {
+                m_Value = null;
+                m_HasValue = false;
             }
 
             public bool Bond(Input input)
@@ -107,26 +123,36 @@
             public void Evaluate() => m_Atom.Execute();
         }
 
+        private bool m_CanBeReset = true;
+        private bool m_WasExecuted = false;
         private readonly bool m_CanEntry;
-        private readonly string m_ID = Guid.NewGuid().ToString();
+        private readonly byte[] m_ID;
         private Reaction? m_Reaction;
-        private Atom? m_Caller = null;
-        private readonly Dictionary<string, Atom?> m_Triggers = new();
-        private readonly Dictionary<string, Input> m_Inputs = new();
-        private readonly Dictionary<string, Output> m_Outputs = new();
+        private readonly List<Atom> m_Caller = new();
+        private readonly Atom?[] m_Triggers;
+        private readonly Input[] m_Inputs;
+        private readonly Output[] m_Outputs;
 
-        public string ID => m_ID;
+        public byte[] ID => m_ID;
+        public bool WasExecuted => m_WasExecuted;
 
-        internal Atom(Nucleus nucleus)
+        internal Atom(byte[] id, bool canEntry, byte nbTriggers, Type[] inputsType, Type[] outputsType)
         {
-            m_CanEntry = nucleus.CanEntry;
-            SetReaction(nucleus.CreateReaction());
-            foreach (Tuple<string, Type> input in nucleus.Inputs)
-                m_Inputs[input.Item1] = new(this, input.Item1, input.Item2);
-            foreach (Tuple<string, Type> output in nucleus.Outputs)
-                m_Outputs[output.Item1] = new(this, output.Item1, output.Item2);
-            foreach (string triggers in nucleus.Triggers)
-                m_Triggers[triggers] = null;
+            //TODO Store nucleus, and at serialization if no nucleus is stored (value or return) save inputs type or outputs value and type
+            m_ID = id;
+            m_CanEntry = canEntry;
+
+            m_Triggers = new Atom?[nbTriggers];
+            for (byte i = 0; i != nbTriggers; ++i)
+                m_Triggers[i] = null;
+
+            m_Inputs = new Input[inputsType.Length];
+            for (byte i = 0; i != inputsType.Length; ++i)
+                m_Inputs[i] = new(this, i, inputsType[i]);
+
+            m_Outputs = new Output[outputsType.Length];
+            for (byte i = 0; i != outputsType.Length; ++i)
+                m_Outputs[i] = new(this, outputsType[i]);
         }
 
         internal void SetReaction(Reaction? reaction)
@@ -135,16 +161,14 @@
             m_Reaction?.SetAtom(this);
         }
 
-        internal bool CanBeEntryPoint() => !m_CanEntry && m_Triggers.Count > 0;
+        internal bool CanBeEntryPoint() => !m_CanEntry && m_Triggers.Length > 0;
 
         internal bool Check()
         {
-            if (m_CanEntry && m_Caller == null)
-                return false;
             HashSet<string> recursiveCheck = new();
             if (!CheckInput(ref recursiveCheck))
                 return false;
-            foreach (var atom in m_Triggers.Values)
+            foreach (var atom in m_Triggers)
             {
                 if (atom != null && !atom.Check())
                     return false;
@@ -154,9 +178,11 @@
 
         internal bool CheckInput(ref HashSet<string> atomsID)
         {
-            if (!atomsID.Add(m_ID))
+            if (!atomsID.Add(Encoding.ASCII.GetString(m_ID)))
                 return false;
-            foreach (var input in m_Inputs.Values)
+            if (m_CanEntry && m_Caller.Count == 0)
+                return false;
+            foreach (var input in m_Inputs)
             {
                 if (!input.CheckInput(ref atomsID))
                     return false;
@@ -164,87 +190,104 @@
             return true;
         }
 
-        internal bool Trigger(string trigger)
+        internal bool Trigger(byte idx)
         {
-            if (m_Triggers.TryGetValue(trigger, out var atom))
-                return atom?.Execute() ?? false;
-            return false;
+            if (idx >= m_Triggers.Length)
+                return false;
+            Atom? atom = m_Triggers[idx];
+            return atom?.Execute() ?? false;
         }
 
-        public T? GetInput<T>(string name)
+        public T? GetInput<T>(byte idx)
         {
-            if (m_Inputs.TryGetValue(name, out var input))
-            {
-                if (typeof(T).IsAssignableFrom(input.Type))
-                    return (T?)input.Value;
-            }
+            if (idx >= m_Inputs.Length)
+                return default;
+            Input input = m_Inputs[idx];
+            if (typeof(T).IsAssignableFrom(input.Type))
+                return (T?)input.Value;
             return default;
         }
 
-        public void SetOutput(string name, object? value)
+        public void SetOutput(byte idx, object? value)
         {
-            if (m_Outputs.TryGetValue(name, out var output))
-                output.SetValue(value);
+            if (idx >= m_Outputs.Length)
+                return;
+            m_Outputs[idx].SetValue(value);
         }
 
         internal bool Execute()
         {
-            foreach (var input in m_Inputs)
+            foreach (Input input in m_Inputs)
             {
-                if (!input.Value.Evaluate())
+                if (!input.Evaluate())
                     return false;
             }
-            string? exitPoint = m_Reaction?.Execute();
-            foreach (var output in m_Outputs)
+            byte? exitPoint = m_Reaction?.Execute();
+            foreach (Output output in m_Outputs)
             {
-                if (!output.Value.HaveValue())
+                if (!output.HaveValue())
                     return false;
             }
             if (exitPoint != null)
-                Trigger(exitPoint);
+            {
+                m_WasExecuted = Trigger((byte)exitPoint);
+                return m_WasExecuted;
+            }
+            m_WasExecuted = true;
             return true;
         }
 
-        public bool Bond(string trigger, Atom atom)
+        public bool Bond(byte idx, Atom atom)
         {
             if (!atom.m_CanEntry)
                 return false;
-            if (m_Triggers.ContainsKey(trigger))
-            {
-                atom.m_Caller = this;
-                m_Triggers[trigger] = atom;
-                return true;
-            }
-            return false;
+            if (idx >= m_Triggers.Length)
+                return false;
+            atom.m_Caller.Add(this);
+            m_Triggers[idx] = atom;
+            return true;
         }
 
-        internal List<Tuple<string, string>> GetBonds()
+        internal List<Tuple<byte, byte[]>> GetBonds()
         {
-            List<Tuple<string, string>> ret = new();
-            foreach (var trigger in m_Triggers)
+            List<Tuple<byte, byte[]>> ret = new();
+            for (byte i = 0; i != m_Triggers.Length; ++i)
             {
-                if (trigger.Value != null)
-                    ret.Add(new(trigger.Key, trigger.Value.ID));
+                Atom? atom = m_Triggers[i];
+                if (atom != null)
+                    ret.Add(new(i, atom.ID));
             }
             return ret;
         }
 
-        public bool BondTo(string outputName, Atom atom, string inputName)
+        public bool BondTo(byte outputIdx, Atom atom, byte inputIdx)
         {
-            if (m_Outputs.TryGetValue(outputName, out var output))
-            {
-                if (atom.m_Inputs.TryGetValue(inputName, out var input))
-                    return output.Bond(input);
-            }
-            return false;
+            if (outputIdx >= m_Outputs.Length ||
+                inputIdx >= atom.m_Inputs.Length)
+                return false;
+            return m_Outputs[outputIdx].Bond(atom.m_Inputs[inputIdx]);
         }
 
-        internal List<Tuple<string, List<Tuple<string, string>>>> GetInputBonds()
+        internal List<Tuple<byte, List<Tuple<byte[], byte>>>> GetInputBonds()
         {
-            List<Tuple<string, List<Tuple<string, string>>>> ret = new();
-            foreach (var output in m_Outputs)
-                ret.Add(new(output.Key, output.Value.GetLinkedInputs()));
+            List<Tuple<byte, List<Tuple<byte[], byte>>>> ret = new();
+            for (byte i = 0; i != m_Outputs.Length; ++i)
+                ret.Add(new(i, m_Outputs[i].GetLinkedInputs()));
             return ret;
         }
+
+        public void Reset()
+        {
+            if (m_CanBeReset)
+            {
+                m_WasExecuted = false;
+                foreach (Input input in m_Inputs)
+                    input.Reset();
+                foreach (Output output in m_Outputs)
+                    output.Reset();
+            }
+        }
+
+        public void SetCanBeReset(bool canBeReset) => m_CanBeReset = canBeReset;
     }
 }

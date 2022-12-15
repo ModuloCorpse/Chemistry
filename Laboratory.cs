@@ -17,6 +17,15 @@ namespace StreamChemistry
 
         public Molecule NewMolecule<T>() => new(this, typeof(T));
 
-        internal Atom? NewAtom(string name) => (m_Nucleuses.TryGetValue(name, out var nucleus)) ? new(nucleus) : null;
+        internal Atom? NewAtom(string nucleusName, byte[] id)
+        {
+            if (m_Nucleuses.TryGetValue(nucleusName, out var nucleus))
+            {
+                Atom newAtom = new(id, nucleus.CanEntry, (byte)nucleus.Triggers.Length, nucleus.InputsType, nucleus.OutputsType);
+                newAtom.SetReaction(nucleus.CreateReaction());
+                return newAtom;
+            }
+            return null;
+        }
     }
 }

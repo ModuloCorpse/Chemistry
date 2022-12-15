@@ -4,39 +4,56 @@
     {
         private readonly bool m_CanEntry;
         private readonly string m_Name;
-        private readonly HashSet<string> m_Triggers = new();
-        private readonly List<Tuple<string, Type>> m_Inputs = new();
-        private readonly List<Tuple<string, Type>> m_Outputs = new();
+        private readonly string[] m_Triggers;
+        private readonly string[] m_InputsName;
+        private readonly Type[] m_InputsType;
+        private readonly string[] m_OutputsName;
+        private readonly Type[] m_OutputsType;
 
         internal bool CanEntry => m_CanEntry;
         internal string Name => m_Name;
-        internal List<Tuple<string, Type>> Inputs => m_Inputs;
-        internal List<Tuple<string, Type>> Outputs => m_Outputs;
-        internal HashSet<string> Triggers => m_Triggers;
+        public string[] Triggers => m_Triggers;
+        public string[] InputsName => m_InputsName;
+        public Type[] InputsType => m_InputsType;
+        public string[] OutputsName => m_OutputsName;
+        public Type[] OutputsType => m_OutputsType;
 
-        public Nucleus(string name, bool canEntry)
+        public Nucleus(string name, bool canEntry, byte nbTrigger, byte nbInput, byte nbOutput)
         {
-            m_CanEntry = canEntry;
             m_Name = name;
+            m_CanEntry = canEntry;
+            m_Triggers = new string[nbTrigger];
+            m_InputsName = new string[nbInput];
+            m_InputsType = new Type[nbInput];
+            m_OutputsName = new string[nbOutput];
+            m_OutputsType = new Type[nbOutput];
         }
 
-        public bool AddTrigger(string name) => m_Triggers.Add(name);
-
-        public bool AddInput<T>(string name) => AddInput(name, typeof(T));
-        public bool AddInput(string name, Type type)
+        public bool SetTrigger(byte idx, string name)
         {
-            if (m_Inputs.Any(item => item.Item1 == name))
+            if (idx >= m_Triggers.Length || m_Triggers.Any(item => item == name))
                 return false;
-            m_Inputs.Add(new(name, type));
+            m_Triggers[idx] = name;
             return true;
         }
 
-        public bool AddOutput<T>(string name) => AddOutput(name, typeof(T));
-        public bool AddOutput(string name, Type type)
+        public bool SetInput<T>(byte idx, string name) => SetInput(idx, name, typeof(T));
+        public bool SetInput(byte idx, string name, Type type)
         {
-            if (m_Outputs.Any(item => item.Item1 == name))
+            if (idx >= m_InputsName.Length || m_InputsName.Any(item => item == name))
                 return false;
-            m_Outputs.Add(new(name, type));
+            m_InputsName[idx] = name;
+            m_InputsType[idx] = type;
+            return true;
+        }
+
+        public bool SetOutput<T>(byte idx, string name) => SetOutput(idx, name, typeof(T));
+        public bool SetOutput(byte idx, string name, Type type)
+        {
+            if (idx >= m_OutputsName.Length || m_OutputsName.Any(item => item == name))
+                return false;
+            m_OutputsName[idx] = name;
+            m_OutputsType[idx] = type;
             return true;
         }
 
