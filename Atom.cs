@@ -1,7 +1,6 @@
-﻿using System.Text;
-
-namespace StreamChemistry
+﻿namespace StreamChemistry
 {
+    //TODO Add a force state (to force recompute of all outputs (if atom is not canEntry))
     public class Atom
     {
         private class Input
@@ -23,9 +22,11 @@ namespace StreamChemistry
                 m_Type = type;
             }
 
-            public Tuple<byte[], byte> GetInputInfo() => new(m_Atom.ID, m_Idx);
+            public Tuple<uint, byte> GetInputInfo() => new(m_Atom.ID, m_Idx);
 
-            public bool CheckInput(ref HashSet<string> atomsID) => m_Output?.CheckInput(ref atomsID) ?? false;
+            public bool CheckInput(HashSet<uint> atomsID) => m_Output?.CheckInput(atomsID) ?? false;
+
+            //TODO Add a force evaluate (don't check value and force evaluate output)
 
             public bool Evaluate()
             {
@@ -48,7 +49,10 @@ namespace StreamChemistry
             {
                 if (value == null || m_Type.IsAssignableFrom(value.GetType()))
                 {
-                    m_Value = value;
+                    if (value == null)
+                        m_Value = null;
+                    else
+                        m_Value = value;
                     m_HasValue = true;
                 }
             }
@@ -68,6 +72,7 @@ namespace StreamChemistry
             private readonly List<Input> m_Inputs = new();
             private bool m_HasValue = false;
             private object? m_Value = null;
+            internal Type Type => m_Type;
 
             public Output(Atom atom, Type type)
             {
@@ -75,15 +80,15 @@ namespace StreamChemistry
                 m_Type = type;
             }
 
-            public List<Tuple<byte[], byte>> GetLinkedInputs()
+            public List<Tuple<uint, byte>> GetLinkedInputs()
             {
-                List<Tuple<byte[], byte>> ret = new();
+                List<Tuple<uint, byte>> ret = new();
                 foreach (var input in m_Inputs)
                     ret.Add(input.GetInputInfo());
                 return ret;
             }
 
-            public bool CheckInput(ref HashSet<string> atomsID) => m_Atom.CheckInput(ref atomsID);
+            public bool CheckInput(HashSet<uint> atomsID) => m_Atom.CheckInput(atomsID);
 
             public bool HaveValue() => m_HasValue;
             public object? GetValue() => m_Value;
@@ -92,7 +97,10 @@ namespace StreamChemistry
             {
                 if (value == null || m_Type.IsAssignableFrom(value.GetType()))
                 {
-                    m_Value = value;
+                    if (value == null)
+                        m_Value = null;
+                    else
+                        m_Value = value;
                     m_HasValue = true;
                     foreach (var input in m_Inputs)
                         input.SetValue(m_Value);
@@ -120,26 +128,29 @@ namespace StreamChemistry
                 return false;
             }
 
+            //TODO Add a force evaluate (force execute atom)
             public void Evaluate() => m_Atom.Execute();
         }
 
         private bool m_CanBeReset = true;
         private bool m_WasExecuted = false;
         private readonly bool m_CanEntry;
-        private readonly byte[] m_ID;
+        private readonly uint m_ID;
+        private readonly uint m_NucleusID;
         private Reaction? m_Reaction;
         private readonly List<Atom> m_Caller = new();
         private readonly Atom?[] m_Triggers;
         private readonly Input[] m_Inputs;
         private readonly Output[] m_Outputs;
 
-        public byte[] ID => m_ID;
+        public uint ID => m_ID;
+        internal uint NucleusID => m_NucleusID;
         public bool WasExecuted => m_WasExecuted;
 
-        internal Atom(byte[] id, bool canEntry, byte nbTriggers, Type[] inputsType, Type[] outputsType)
+        internal Atom(uint id, uint nucleusID, bool canEntry, byte nbTriggers, Type[] inputsType, Type[] outputsType)
         {
-            //TODO Store nucleus, and at serialization if no nucleus is stored (value or return) save inputs type or outputs value and type
             m_ID = id;
+            m_NucleusID = nucleusID;
             m_CanEntry = canEntry;
 
             m_Triggers = new Atom?[nbTriggers];
@@ -165,8 +176,7 @@ namespace StreamChemistry
 
         internal bool Check()
         {
-            HashSet<string> recursiveCheck = new();
-            if (!CheckInput(ref recursiveCheck))
+            if (!CheckInput(new()))
                 return false;
             foreach (var atom in m_Triggers)
             {
@@ -176,17 +186,18 @@ namespace StreamChemistry
             return true;
         }
 
-        internal bool CheckInput(ref HashSet<string> atomsID)
+        internal bool CheckInput(HashSet<uint> atomsID)
         {
-            if (!atomsID.Add(Encoding.ASCII.GetString(m_ID)))
+            if (!atomsID.Add(m_ID))
                 return false;
             if (m_CanEntry && m_Caller.Count == 0)
                 return false;
             foreach (var input in m_Inputs)
             {
-                if (!input.CheckInput(ref atomsID))
+                if (!input.CheckInput(atomsID))
                     return false;
             }
+            atomsID.Remove(m_ID);
             return true;
         }
 
@@ -208,12 +219,35 @@ namespace StreamChemistry
             return default;
         }
 
-        public void SetOutput(byte idx, object? value)
+        public bool SetOutputs(object?[] values)
+        {
+            byte i = 0;
+            foreach (object? value in values)
+            {
+                if (!SetOutput(i++, value))
+                    return false;
+            }
+            return true;
+        }
+
+        public bool SetOutputs(List<Tuple<byte, object?>> outputs)
+        {
+            foreach (Tuple<byte, object?> output in outputs)
+            {
+                if (!SetOutput(output.Item1, output.Item2))
+                    return false;
+            }
+            return true;
+        }
+
+        public bool SetOutput(byte idx, object? value)
         {
             if (idx >= m_Outputs.Length)
-                return;
-            m_Outputs[idx].SetValue(value);
+                return false;
+            return m_Outputs[idx].SetValue(value);
         }
+
+        //TODO Add a force execute (force evaluate inputs)
 
         internal bool Execute()
         {
@@ -248,18 +282,6 @@ namespace StreamChemistry
             return true;
         }
 
-        internal List<Tuple<byte, byte[]>> GetBonds()
-        {
-            List<Tuple<byte, byte[]>> ret = new();
-            for (byte i = 0; i != m_Triggers.Length; ++i)
-            {
-                Atom? atom = m_Triggers[i];
-                if (atom != null)
-                    ret.Add(new(i, atom.ID));
-            }
-            return ret;
-        }
-
         public bool BondTo(byte outputIdx, Atom atom, byte inputIdx)
         {
             if (outputIdx >= m_Outputs.Length ||
@@ -268,12 +290,43 @@ namespace StreamChemistry
             return m_Outputs[outputIdx].Bond(atom.m_Inputs[inputIdx]);
         }
 
-        internal List<Tuple<byte, List<Tuple<byte[], byte>>>> GetInputBonds()
+        internal List<Tuple<uint, byte, uint>> GetBonds()
         {
-            List<Tuple<byte, List<Tuple<byte[], byte>>>> ret = new();
-            for (byte i = 0; i != m_Outputs.Length; ++i)
-                ret.Add(new(i, m_Outputs[i].GetLinkedInputs()));
+            List<Tuple<uint, byte, uint>> ret = new();
+            for (byte i = 0; i != m_Triggers.Length; ++i)
+            {
+                Atom? atom = m_Triggers[i];
+                if (atom != null)
+                    ret.Add(new(m_ID, i, atom.ID));
+            }
             return ret;
+        }
+
+        internal List<Tuple<uint, byte, uint, byte>> GetInputBonds()
+        {
+            List<Tuple<uint, byte, uint, byte>> ret = new();
+            for (byte i = 0; i != m_Outputs.Length; ++i)
+            {
+                List<Tuple<uint, byte>> linkedInputs = m_Outputs[i].GetLinkedInputs();
+                foreach (var linkedInput in linkedInputs)
+                    ret.Add(new(m_ID, i, linkedInput.Item1, linkedInput.Item2));
+            }
+            return ret;
+        }
+
+        internal List<Type> GetOutputsType()
+        {
+            List<Type> ret = new();
+            foreach (Output output in m_Outputs)
+                ret.Add(output.Type);
+            return ret;
+        }
+
+        internal object? GetOutputValue()
+        {
+            if (m_NucleusID == 0)
+                return m_Outputs[0].GetValue();
+            return null;
         }
 
         public void Reset()
