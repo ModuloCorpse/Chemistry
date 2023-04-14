@@ -1,6 +1,5 @@
 ﻿namespace StreamChemistry
 {
-    //TODO Add a force state (to force recompute of all outputs (if atom is not canEntry))
     public class Atom
     {
         private class Input
@@ -26,18 +25,13 @@
 
             public bool CheckInput(HashSet<uint> atomsID) => m_Output?.CheckInput(atomsID) ?? false;
 
-            //TODO Add a force evaluate (don't check value and force evaluate output)
-
-            public bool Evaluate()
+            public bool Evaluate(Erlenmeyer environment)
             {
-                if (m_HasValue)
-                    return true;
+                Reset();
                 if (m_Output != null)
                 {
-                    if (m_Output.HaveValue())
-                        SetValue(m_Output.GetValue());
-                    else
-                        m_Output.Evaluate();
+                    if (m_Output.Evaluate(environment, out object ? value))
+                        SetValue(value);
                     return m_HasValue;
                 }
                 return false;
@@ -102,8 +96,6 @@
                     else
                         m_Value = value;
                     m_HasValue = true;
-                    foreach (var input in m_Inputs)
-                        input.SetValue(m_Value);
                     return true;
                 }
                 return false;
@@ -128,8 +120,18 @@
                 return false;
             }
 
-            //TODO Add a force evaluate (force execute atom)
-            public void Evaluate() => m_Atom.Execute();
+            public bool Evaluate(Erlenmeyer environment, out object? value)
+            {
+                if (!m_Atom.IsStatic())
+                    m_Atom.Execute(environment);
+                if (m_HasValue)
+                {
+                    value = m_Value;
+                    return true;
+                }
+                value = null;
+                return false;
+            }
         }
 
         private bool m_CanBeReset = true;
@@ -172,6 +174,8 @@
             m_Reaction?.SetAtom(this);
         }
 
+        internal bool IsStatic() => m_CanEntry || m_Triggers.Length > 0 || m_Reaction == null;
+
         internal bool CanBeEntryPoint() => !m_CanEntry && m_Triggers.Length > 0;
 
         internal bool Check()
@@ -201,12 +205,12 @@
             return true;
         }
 
-        internal bool Trigger(byte idx)
+        internal bool Trigger(byte idx, Erlenmeyer environment)
         {
             if (idx >= m_Triggers.Length)
                 return false;
             Atom? atom = m_Triggers[idx];
-            return atom?.Execute() ?? false;
+            return atom?.Execute(environment) ?? false;
         }
 
         public T? GetInput<T>(byte idx)
@@ -247,16 +251,15 @@
             return m_Outputs[idx].SetValue(value);
         }
 
-        //TODO Add a force execute (force evaluate inputs)
 
-        internal bool Execute()
+        internal bool Execute(Erlenmeyer environment)
         {
             foreach (Input input in m_Inputs)
             {
-                if (!input.Evaluate())
+                if (!input.Evaluate(environment))
                     return false;
             }
-            byte? exitPoint = m_Reaction?.Execute();
+            byte? exitPoint = m_Reaction?.Execute(environment);
             foreach (Output output in m_Outputs)
             {
                 if (!output.HaveValue())
@@ -264,7 +267,7 @@
             }
             if (exitPoint != null)
             {
-                m_WasExecuted = Trigger((byte)exitPoint);
+                m_WasExecuted = Trigger((byte)exitPoint, environment);
                 return m_WasExecuted;
             }
             m_WasExecuted = true;
@@ -311,6 +314,14 @@
                 foreach (var linkedInput in linkedInputs)
                     ret.Add(new(m_ID, i, linkedInput.Item1, linkedInput.Item2));
             }
+            return ret;
+        }
+
+        internal List<Type> GetInputsType()
+        {
+            List<Type> ret = new();
+            foreach (Input input in m_Inputs)
+                ret.Add(input.Type);
             return ret;
         }
 

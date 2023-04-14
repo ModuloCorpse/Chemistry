@@ -5,7 +5,33 @@ namespace StreamChemistry
     public class Molecule
     {
         public delegate T? MoleculeDelegate<T>(params object?[] parameters);
-        private class EntryPointReaction : Reaction { public override byte? Execute() => 0; }
+        private class EntryPointReaction : Reaction { public override byte? Execute(Erlenmeyer _) => 0; }
+
+        private class GetValueReaction : Reaction
+        {
+            public override byte? Execute(Erlenmeyer environment)
+            {
+                string? name = GetInput<string>(0);
+                if (name != null)
+                    SetOutput(0, environment.GetVariable(name));
+                return null;
+            }
+        }
+
+        private class SetValueReaction : Reaction
+        {
+            public override byte? Execute(Erlenmeyer environment)
+            {
+                object? value = GetInput<object>(0);
+                string? name = GetInput<string>(1);
+                if (value != null && name != null)
+                {
+                    environment.SetVariable(name, value);
+                    return 0;
+                }
+                return null;
+            }
+        }
 
         private readonly Type? m_ReturnType;
         private readonly Laboratory m_Laboratory;
@@ -75,6 +101,24 @@ namespace StreamChemistry
             return atom;
         }
 
+        public Atom? NewGetValueAtom(Type valueType)
+        {
+            Atom atom = new((uint)m_Atoms.Count, 3, false, 0, new Type[1] { typeof(string) }, new Type[1] { valueType });
+            atom.SetReaction(new GetValueReaction());
+            m_Atoms.Add(atom);
+            return atom;
+        }
+        public Atom? NewGetValueAtom<T>() => NewGetValueAtom(typeof(T));
+
+        public Atom? NewSetValueAtom(Type valueType)
+        {
+            Atom atom = new((uint)m_Atoms.Count, 4, true, 1, new Type[2] { valueType, typeof(string) }, Array.Empty<Type>());
+            atom.SetReaction(new SetValueReaction());
+            m_Atoms.Add(atom);
+            return atom;
+        }
+        public Atom? NewSetValueAtom<T>() => NewSetValueAtom(typeof(T));
+
         public Atom? NewValueAtom(object value)
         {
             if (File.Helper.GetTypeCodeOf(value) == -1)
@@ -100,7 +144,8 @@ namespace StreamChemistry
                 atom.Reset();
             if (!m_EntryPoint.SetOutputs(parameters))
                 return null;
-            m_EntryPoint.Execute();
+            Erlenmeyer environment = new();
+            m_EntryPoint.Execute(environment);
             foreach (Atom atom in m_Returns)
             {
                 if (atom.WasExecuted)

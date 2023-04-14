@@ -76,6 +76,7 @@ namespace StreamChemistry.File
         }
 
         //Type
+        //TODO Switch to ushort ID to reduce file size
         public void WriteType(Type type)
         {
             string? typeName = type.AssemblyQualifiedName;

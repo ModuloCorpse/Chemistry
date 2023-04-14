@@ -9,7 +9,7 @@ namespace StreamChemistry
         private readonly Dictionary<string, Nucleus> m_Nucleuses = new();
         private readonly Dictionary<string, uint> m_NucleusesToIdx = new();
         private readonly Dictionary<uint, string> m_IdxToNucleuses = new();
-        private uint m_NucleusIdx = 3;
+        private uint m_NucleusIdx = 10; //ID 0 to 9 are reserved
 
         public Laboratory()
         {
@@ -76,6 +76,8 @@ namespace StreamChemistry
             HashSet<int> tags = molecule.Tags;
             Dictionary<string, List<uint>> atoms = new();
             List<Tuple<uint, object>> valueAtoms = new();
+            List<Tuple<uint, Type>> getValueAtoms = new();
+            List<Tuple<uint, Type>> setValueAtoms = new();
 
             List<Atom> molAtoms = molecule.Atoms;
             foreach (var atom in molAtoms)
@@ -94,6 +96,10 @@ namespace StreamChemistry
                     atoms[nucleus].Add(atom.ID);
 
                 }
+                else if (atom.NucleusID == 3)
+                    getValueAtoms.Add(new(atom.ID, atom.GetOutputsType()[0]));
+                else if (atom.NucleusID == 4)
+                    setValueAtoms.Add(new(atom.ID, atom.GetInputsType()[0]));
                 else
                 {
                     string nucleus = m_IdxToNucleuses[atom.NucleusID];
@@ -130,6 +136,7 @@ namespace StreamChemistry
             if (parametersType.Count != 0)
             {
                 writer.WriteByte(3);
+                //TODO Write ushort
                 writer.WriteInt(parametersType.Count);
                 foreach (Type parameterType in parametersType)
                     writer.WriteType(parameterType);
@@ -165,9 +172,26 @@ namespace StreamChemistry
             if (tags.Count!= 0)
             {
                 writer.WriteByte(7);
+                //TODO Write ushort
                 writer.WriteInt(tags.Count);
                 foreach (int tag in tags)
                     writer.WriteInt(tag);
+            }
+
+            //Code 8
+            foreach (var getValueAtom in getValueAtoms)
+            {
+                writer.WriteByte(8);
+                writer.WriteUInt(getValueAtom.Item1);
+                writer.WriteType(getValueAtom.Item2);
+            }
+
+            //Code 9
+            foreach (var setValueAtom in setValueAtoms)
+            {
+                writer.WriteByte(9);
+                writer.WriteUInt(setValueAtom.Item1);
+                writer.WriteType(setValueAtom.Item2);
             }
 
             writer.Save();
@@ -182,6 +206,8 @@ namespace StreamChemistry
             List<int> tags = new();
             Dictionary<string, List<uint>> atoms = new();
             List<Tuple<uint, object>> valueAtoms = new();
+            List<Tuple<uint, Type>> getValueAtoms = new();
+            List<Tuple<uint, Type>> setValueAtoms = new();
 
             string currentNucleus = "";
             Dictionary<uint, Atom> idToAtom = new();
@@ -211,6 +237,7 @@ namespace StreamChemistry
                         }
                     case 3: //Parameters type
                         {
+                            //TODO Read ushort
                             int nbTypes = reader.ReadInt();
                             for (int i = 0; i < nbTypes; i++)
                                 parametersType.Add(reader.ReadType()!);
@@ -233,9 +260,26 @@ namespace StreamChemistry
                         }
                     case 7: //Tags
                         {
+                            //TODO Read ushort
                             int nbTags = reader.ReadInt();
                             for (int i = 0; i < nbTags; i++)
                                 tags.Add(reader.ReadInt()!);
+                            break;
+                        }
+                    case 8: //Get Value Type
+                        {
+                            uint id = reader.ReadUInt();
+                            Type? type = reader.ReadType();
+                            if (type != null)
+                                getValueAtoms.Add(new(id, type!));
+                            break;
+                        }
+                    case 9: //Set Value Type
+                        {
+                            uint id = reader.ReadUInt();
+                            Type? type = reader.ReadType();
+                            if (type != null)
+                                setValueAtoms.Add(new(id, type!));
                             break;
                         }
                 }
@@ -267,6 +311,20 @@ namespace StreamChemistry
                 Atom? ret = newMolecule.NewValueAtom(valueAtom.Item2);
                 if (ret != null)
                     idToAtom[valueAtom.Item1] = ret;
+            }
+
+            foreach (var getValueAtom in getValueAtoms)
+            {
+                Atom? ret = newMolecule.NewGetValueAtom(getValueAtom.Item2);
+                if (ret != null)
+                    idToAtom[getValueAtom.Item1] = ret;
+            }
+
+            foreach (var setValueAtom in setValueAtoms)
+            {
+                Atom? ret = newMolecule.NewSetValueAtom(setValueAtom.Item2);
+                if (ret != null)
+                    idToAtom[setValueAtom.Item1] = ret;
             }
 
             foreach (var executionBond in executionBonds)

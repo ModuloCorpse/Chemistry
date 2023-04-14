@@ -73,6 +73,7 @@ namespace StreamChemistry.File
         }
 
         //Type
+        //TODO Switch to ushort ID to reduce file size
         public Type? ReadType() => Type.GetType(ReadString());
 
         public IObject? ReadFileObject()

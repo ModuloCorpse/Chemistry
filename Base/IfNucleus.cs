@@ -4,7 +4,7 @@
     {
         private class IfReaction : Reaction
         {
-            public override byte? Execute()
+            public override byte? Execute(Erlenmeyer _)
             {
                 bool? condition = GetInput<bool>(0);
                 if (condition != null)

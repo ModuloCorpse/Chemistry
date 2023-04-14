@@ -4,7 +4,7 @@
     {
         private class EqualsReaction : Reaction
         {
-            public override byte? Execute()
+            public override byte? Execute(Erlenmeyer _)
             {
                 object? a = GetInput<object>(0);
                 object? b = GetInput<object>(1);
