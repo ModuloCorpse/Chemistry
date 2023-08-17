@@ -1,4 +1,4 @@
-﻿namespace StreamChemistry.File
+﻿namespace Chemistry.File
 {
     public interface IObject
     {

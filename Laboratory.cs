@@ -1,7 +1,7 @@
-﻿using StreamChemistry.Base;
-using StreamChemistry.File;
+﻿using Chemistry.Base;
+using Chemistry.File;
 
-namespace StreamChemistry
+namespace Chemistry
 {
     public class Laboratory
     {

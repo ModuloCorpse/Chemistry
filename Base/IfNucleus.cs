@@ -1,4 +1,4 @@
-﻿namespace StreamChemistry.Base
+﻿namespace Chemistry.Base
 {
     public class IfNucleus : Nucleus
     {

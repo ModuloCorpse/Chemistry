@@ -2,7 +2,7 @@
 using System.Reflection;
 using System.Text;
 
-namespace StreamChemistry.File
+namespace Chemistry.File
 {
     public class Reader
     {

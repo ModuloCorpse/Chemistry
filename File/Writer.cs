@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace StreamChemistry.File
+namespace Chemistry.File
 {
     public class Writer
     {

@@ -1,4 +1,4 @@
-﻿namespace StreamChemistry
+﻿namespace Chemistry
 {
     public abstract class Reaction
     {
