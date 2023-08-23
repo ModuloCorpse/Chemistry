@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-namespace Chemistry
+﻿namespace Chemistry
 {
     public class Molecule
     {

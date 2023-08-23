@@ -1,6 +1,4 @@
-﻿using System.Reflection;
-
-namespace Chemistry.File
+﻿namespace Chemistry.File
 {
     public static class Helper
     {
